@@ -8,11 +8,9 @@ on:
   push:
     branches: [ "main" ]
 
-
     # ✅ Global Environment Variables
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/frontend-app:${{ github.run_number }}
-
 
 
 jobs:
