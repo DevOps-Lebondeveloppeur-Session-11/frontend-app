@@ -1,0 +1,86 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI-CD Frontend App
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  push:
+    branches: [ "main" ]
+
+
+    # ✅ Global Environment Variables
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/frontend-app:${{ github.run_number }}
+
+
+
+jobs:
+  # ✅ Run Unit Tests
+  unit-test-job:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Clone Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
+  # ✅ Build and Push Docker Image
+  build-and-push-job:
+    needs: [unit-test-job]
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Clone Source Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.IMAGE_NAME }} --build-arg VITE_API_URL=https://api.s11.lebondeveloppeur.net . 
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker image to Docker Hub
+        run: docker push ${{ env.IMAGE_NAME }}
+
+  deploy-job:
+    needs: build-and-push-job
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Connect to the VPS using SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+
+              # Pull the latest Docker image
+              sudo docker pull ${{ env.IMAGE_NAME }}
+
+               # Remove the old container if it exists
+              sudo docker rm -f frontend-app || echo "No existing container to remove"
+
+                # Run the new container with environment variables
+              sudo docker run -d \
+                --name frontend-app \
+                -p 3000:80 \
+                --restart=always \
+                ${{ env.IMAGE_NAME }}
+
+              # Clean up unused images.
+              sudo docker image prune -f
